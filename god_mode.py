@@ -1159,14 +1159,18 @@ def main():
     logger.info("=" * 60)
     logger.info("GOD MODE FOREX SIGNAL SYSTEM — STARTING")
     logger.info("=" * 60)
-    
+
+    # Create and set event loop for Python 3.10+ compatibility
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     # Initial golden pairs
     EVOLUTION.get_golden_pairs()
-    
+
     # Start scheduler thread
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
-    
+
     # Run telegram bot (blocking)
     TELEGRAM_BOT.run()
 
