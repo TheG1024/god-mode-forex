@@ -1,14 +1,14 @@
 # Core
 python-telegram-bot==21.4
 streamlit==1.38.0
-streamlit-autorefresh==0.0.4
+streamlit-autorefresh==1.0.1
 pandas>=2.3.3
-numpy==1.26.4
+numpy>=1.26.4
 requests==2.32.3
 aiohttp==3.9.5
 
 # Technical Analysis
-scipy==1.13.1
+scipy>=1.13.1
 
 # NVIDIA NIM / LLM
 openai==1.37.1
