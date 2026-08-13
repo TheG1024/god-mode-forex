@@ -11,7 +11,7 @@ aiohttp==3.9.5
 scipy>=1.13.1
 
 # NVIDIA NIM / LLM
-openai==1.37.1
+openai>=1.37.1
 
 # Visualization
 plotly==5.23.0
