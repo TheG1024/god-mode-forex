@@ -5,6 +5,7 @@ Equity curve, AI-bias heatmap, signal log, performance metrics.
 """
 
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -85,11 +86,6 @@ def compute_daily_pnl(signals_df: pd.DataFrame) -> pd.DataFrame:
 def render_sidebar():
     st.sidebar.title("🤖 God Mode Forex")
     st.sidebar.caption("SMC Deep OTE + Neural Analysis")
-    
-    # Auto-refresh
-    auto_refresh = st.sidebar.checkbox("Auto-refresh (30s)", value=True)
-    if auto_refresh:
-        st.rerun()
     
     st.sidebar.divider()
     
@@ -439,6 +435,9 @@ def main():
     
     with tab6:
         render_neural_commentary(signals_df)
+    
+    # Auto-refresh every 30 seconds using JavaScript
+    st_autorefresh(interval=30000, key="auto_refresh")
 
 if __name__ == "__main__":
     main()

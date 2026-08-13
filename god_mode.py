@@ -12,10 +12,8 @@ import logging
 import asyncio
 import threading
 import time
-import hashlib
-import hmac
-import base64
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List, Tuple, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -43,7 +41,6 @@ load_dotenv()
 class Config:
     # API Keys
     TWELVE_DATA_API_KEY: str = os.getenv("TWELVE_DATA_API_KEY", "")
-    FRANKFURTER_API_KEY: str = os.getenv("FRANKFURTER_API_KEY", "")  # Free, no key needed
     NVIDIA_NIM_API_KEY: str = os.getenv("NVIDIA_NIM_API_KEY", "")
     NVIDIA_NIM_BASE_URL: str = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -64,6 +61,7 @@ class Config:
     ATR_SL_MULTIPLIER: float = 1.5
     RISK_REWARD_TP1: float = 1.0
     RISK_REWARD_TP2: float = 2.0
+    SIGNAL_EXPIRY_HOURS: int = 4  # Auto-expire PENDING signals after this many hours
     
     # Volatility Scanner
     SCAN_PAIRS: List[str] = None  # Will be populated from ALL_PAIRS
@@ -155,7 +153,7 @@ class Signal:
     
     def __post_init__(self):
         if not self.created_at:
-            self.created_at = datetime.utcnow().isoformat()
+            self.created_at = datetime.now(timezone.utc).isoformat()
         if not self.updated_at:
             self.updated_at = self.created_at
 
@@ -251,22 +249,33 @@ class Database:
                     id=row[0], pair=row[1], direction=SignalDirection(row[2]),
                     entry_price=row[3], sl_price=row[4], tp1_price=row[5], tp2_price=row[6],
                     fib_level=row[7], htf_bias=row[8], rsi_value=row[9], atr_value=row[10],
-                    neural_score=row[10], neural_commentary=row[11], news_risk=row[12],
-                    status=SignalStatus(row[13]), created_at=row[14], updated_at=row[15],
-                    result=row[16], net_r=row[17]
+                    neural_score=row[11], neural_commentary=row[12], news_risk=row[13],
+                    status=SignalStatus(row[14]), created_at=row[15], updated_at=row[16],
+                    result=row[17], net_r=row[18]
                 )
         return None
     
     def update_signal(self, signal_id: str, **kwargs):
+        ALLOWED_COLUMNS = {
+            "status", "result", "net_r", "updated_at", "neural_score",
+            "neural_commentary", "news_risk", "entry_price", "sl_price",
+            "tp1_price", "tp2_price"
+        }
+        fields = []
+        values = []
+        for k, v in kwargs.items():
+            if k not in ALLOWED_COLUMNS:
+                raise ValueError(f"Column '{k}' is not in allowed update columns")
+            fields.append(f"{k}=?")
+            values.append(v)
+        values.append(signal_id)
         with sqlite3.connect(self.path) as conn:
-            fields = [f"{k}=?" for k in kwargs.keys()]
-            values = list(kwargs.values()) + [signal_id]
             conn.execute(f"UPDATE signals SET {','.join(fields)} WHERE id=?", values)
             conn.commit()
     
     def get_active_signals(self) -> List[Signal]:
         with sqlite3.connect(self.path) as conn:
-            rows = conn.execute("SELECT * FROM signals WHERE status IN ('PENDING','ACTIVE')").fetchall()
+            rows = conn.execute("SELECT * FROM signals WHERE status IN ('PENDING','ACTIVE','TP1_HIT')").fetchall()
             return [Signal(
                 id=r[0], pair=r[1], direction=SignalDirection(r[2]), entry_price=r[3],
                 sl_price=r[4], tp1_price=r[5], tp2_price=r[6], fib_level=r[7],
@@ -298,7 +307,7 @@ class Database:
         with sqlite3.connect(self.path) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO pair_volatility VALUES (?,?,?,?,?)
-            """, (pair, atr_avg, vol_score, datetime.utcnow().isoformat(), int(is_golden)))
+            """, (pair, atr_avg, vol_score, datetime.now(timezone.utc).isoformat(), int(is_golden)))
             conn.commit()
     
     def get_golden_pairs(self) -> List[str]:
@@ -307,6 +316,17 @@ class Database:
                 "SELECT pair FROM pair_volatility WHERE is_golden=1 ORDER BY volatility_score DESC"
             ).fetchall()
             return [r[0] for r in rows]
+    
+    def expire_old_signals(self, expiry_hours: int) -> int:
+        """Expire PENDING signals older than expiry_hours. Returns count of expired signals."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=expiry_hours)).isoformat()
+        with sqlite3.connect(self.path) as conn:
+            cursor = conn.execute(
+                "UPDATE signals SET status='EXPIRED', updated_at=? WHERE status='PENDING' AND created_at < ?",
+                (datetime.now(timezone.utc).isoformat(), cutoff)
+            )
+            conn.commit()
+            return cursor.rowcount
 
 DB = Database(CONFIG.DB_PATH)
 
@@ -389,17 +409,6 @@ class DataProvider:
             logger.error(f"TwelveData error for {pair}: {e}")
             return None
     
-    def fetch_frankfurter(self, pair: str, days: int = 90) -> Optional[pd.DataFrame]:
-        """Frankfurter only does daily, not intraday. Use as last resort for direction."""
-        base, quote = pair.split("/")
-        url = f"https://api.frankfurter.dev/v1/latest"
-        try:
-            # Frankfurter doesn't support historical OHLC well, skip for intraday
-            return None
-        except Exception as e:
-            logger.error(f"Frankfurter error: {e}")
-            return None
-    
     def generate_synthetic(self, pair: str, periods: int = 200) -> pd.DataFrame:
         """Generate synthetic OHLC for testing when all APIs fail."""
         np.random.seed(hash(pair) % 2**32)
@@ -417,14 +426,13 @@ class DataProvider:
         })
         df["high"] = df[["open", "high", "close"]].max(axis=1)
         df["low"] = df[["open", "low", "close"]].min(axis=1)
-        df.index = pd.date_range(end=datetime.utcnow(), periods=periods, freq="1h")
+        df.index = pd.date_range(end=datetime.now(timezone.utc), periods=periods, freq="1h")
         return df[["open", "high", "low", "close"]]
     
     def cascade_fetch(self, pair: str, interval: str = "1h") -> pd.DataFrame:
-        """Try Twelve Data → Frankfurter → Synthetic."""
+        """Try Twelve Data → Synthetic fallback."""
         for name, func in [
             ("TwelveData", lambda: self.fetch_twelve_data(pair, interval)),
-            ("Frankfurter", lambda: self.fetch_frankfurter(pair)),
             ("Synthetic", lambda: self.generate_synthetic(pair))
         ]:
             try:
@@ -631,7 +639,7 @@ class NewsFilter:
         if not CONFIG.NEWSAPI_KEY:
             return "UNKNOWN (no API key)"
         
-        cache_key = f"news_{pair}_{datetime.utcnow().strftime('%Y%m%d%H')}"
+        cache_key = f"news_{pair}_{datetime.now(timezone.utc).strftime('%Y%m%d%H')}"
         if cache_key in self.cache:
             return self.cache[cache_key]
         
@@ -660,7 +668,7 @@ class NewsFilter:
                         if pub:
                             try:
                                 pub_dt = datetime.fromisoformat(pub.replace("Z", "+00:00"))
-                                if (datetime.utcnow() - pub_dt.replace(tzinfo=None)).total_seconds() < 86400:
+                                if (datetime.now(timezone.utc) - pub_dt).total_seconds() < 86400:
                                     risk = "HIGH_RISK"
                                     break
                             except:
@@ -767,7 +775,7 @@ class SignalOrchestrator:
                 news_risk = await NEWS_FILTER.check_high_impact(pair)
                 
                 # Create signal
-                signal_id = hashlib.md5(f"{pair}{datetime.utcnow().isoformat()}".encode()).hexdigest()[:12]
+                signal_id = uuid.uuid4().hex[:12]
                 signal = Signal(
                     id=signal_id,
                     pair=pair,
@@ -801,6 +809,11 @@ class SignalOrchestrator:
     
     async def monitor_active_signals(self):
         """Check active signals against current price for TP/SL hits."""
+        # Expire stale PENDING signals first
+        expired_count = DB.expire_old_signals(CONFIG.SIGNAL_EXPIRY_HOURS)
+        if expired_count:
+            logger.info(f"Expired {expired_count} stale PENDING signals")
+        
         active = DB.get_active_signals()
         for signal in active:
             try:
@@ -815,14 +828,14 @@ class SignalOrchestrator:
                         hit = "SL_HIT"
                     elif current_price >= signal.tp2_price:
                         hit = "TP2_HIT"
-                    elif current_price >= signal.tp1_price and signal.status == SignalStatus.ACTIVE:
+                    elif current_price >= signal.tp1_price:
                         hit = "TP1_HIT"
                 else:
                     if current_price >= signal.sl_price:
                         hit = "SL_HIT"
                     elif current_price <= signal.tp2_price:
                         hit = "TP2_HIT"
-                    elif current_price <= signal.tp1_price and signal.status == SignalStatus.ACTIVE:
+                    elif current_price <= signal.tp1_price:
                         hit = "TP1_HIT"
                 
                 if hit:
@@ -846,7 +859,7 @@ class SignalOrchestrator:
             status=SignalStatus(result),
             result="WIN" if net_r > 0 else "LOSS",
             net_r=net_r,
-            updated_at=datetime.utcnow().isoformat()
+            updated_at=datetime.now(timezone.utc).isoformat()
         )
         logger.info(f"Signal {signal.id} resolved: {result} | Net R: {net_r:.2f}")
 
@@ -881,9 +894,7 @@ class TelegramBot:
         if not signals:
             await update.message.reply_text("No Deep OTE setups found.")
             return
-        
-        for s in signals:
-            await self.send_signal_alert(s)
+        await update.message.reply_text(f"✅ {len(signals)} signal(s) generated and sent.")
     
     async def signals_cmd(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         active = DB.get_active_signals()
@@ -949,7 +960,7 @@ class TelegramBot:
         
         DB.update_signal(signal_id, 
             status=SignalStatus.TP2_HIT if result == "WIN" else SignalStatus.SL_HIT,
-            result=result, net_r=net_r, updated_at=datetime.utcnow().isoformat()
+            result=result, net_r=net_r, updated_at=datetime.now(timezone.utc).isoformat()
         )
         await update.message.reply_text(f"✅ Signal {signal_id} updated: {result} | Net R: {net_r:.2f}")
 
@@ -963,7 +974,7 @@ class TelegramBot:
             return
         
         # Get signals from last 7 days
-        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         with sqlite3.connect(CONFIG.DB_PATH) as conn:
             # Closed trades this week
             closed = pd.read_sql("""
@@ -996,7 +1007,7 @@ class TelegramBot:
         
         # Build report
         msg = f"📋 *WEEKLY AUDIT REPORT* 📋\n"
-        msg += f"📅 {datetime.utcnow().strftime('%Y-%m-%d')} 16:00 UTC\n\n"
+        msg += f"📅 {datetime.now(timezone.utc).strftime('%Y-%m-%d')} 16:00 UTC\n\n"
         
         msg += f"📊 *This Week's Closed Trades*\n"
         msg += f"   Total: {total_closed} | Wins: {wins} | Losses: {losses}\n"
@@ -1010,7 +1021,7 @@ class TelegramBot:
             msg += "   No open positions.\n"
         else:
             for _, row in open_pos.iterrows():
-                age_days = (datetime.utcnow() - datetime.fromisoformat(row['created_at'])).days
+                age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(row['created_at'])).days
                 msg += f"   `{row['id']}` {row['pair']} {row['direction']} | {row['status']} | {age_days}d old\n"
         
         try:
@@ -1086,7 +1097,7 @@ class TelegramBot:
         
         DB.update_signal(signal_id,
             status=SignalStatus.TP2_HIT if result == "WIN" else SignalStatus.SL_HIT,
-            result=result, net_r=net_r, updated_at=datetime.utcnow().isoformat()
+            result=result, net_r=net_r, updated_at=datetime.now(timezone.utc).isoformat()
         )
         
         await query.edit_message_text(
@@ -1121,14 +1132,20 @@ TELEGRAM_BOT = TelegramBot()
 # ═══════════════════════════════════════════════════════════════════════
 
 def run_scheduler():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    async def run_async(coro):
+        await coro
+    
     # Scan every 15 minutes
-    schedule.every(15).minutes.do(lambda: asyncio.run(ORCHESTRATOR.scan_all_pairs()))
+    schedule.every(15).minutes.do(lambda: loop.run_until_complete(run_async(ORCHESTRATOR.scan_all_pairs())))
     # Monitor every 5 minutes
-    schedule.every(5).minutes.do(lambda: asyncio.run(ORCHESTRATOR.monitor_active_signals()))
+    schedule.every(5).minutes.do(lambda: loop.run_until_complete(run_async(ORCHESTRATOR.monitor_active_signals())))
     # Rebalance weekly (Monday 00:00 UTC)
     schedule.every().monday.at("00:00").do(EVOLUTION.rebalance_golden_pairs)
     # Weekly audit report (Friday 16:00 UTC)
-    schedule.every().friday.at("16:00").do(lambda: asyncio.run(TELEGRAM_BOT.send_weekly_report()))
+    schedule.every().friday.at("16:00").do(lambda: loop.run_until_complete(run_async(TELEGRAM_BOT.send_weekly_report())))
     
     while True:
         schedule.run_pending()
