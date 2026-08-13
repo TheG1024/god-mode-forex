@@ -1,0 +1,27 @@
+# Core
+python-telegram-bot==21.4
+streamlit==1.38.0
+pandas==2.2.2
+numpy==1.26.4
+requests==2.32.3
+aiohttp==3.9.5
+sqlite3
+threading
+logging
+asyncio
+
+# Technical Analysis (stdlib-based, no TA-Lib)
+scipy==1.13.1
+ta==0.11.0
+
+# NVIDIA NIM / LLM
+openai==1.37.1
+
+# Visualization
+plotly==5.23.0
+matplotlib==3.9.2
+
+# Utilities
+python-dotenv==1.0.1
+pytz==2024.1
+schedule==1.2.2

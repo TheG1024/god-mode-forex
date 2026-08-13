@@ -1,0 +1,1 @@
+web: python god_mode.py
