@@ -13,6 +13,7 @@ import asyncio
 import threading
 import time
 import uuid
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List, Tuple, Any
 from dataclasses import dataclass, asdict
@@ -1128,6 +1129,25 @@ class TelegramBot:
 TELEGRAM_BOT = TelegramBot()
 
 # ═══════════════════════════════════════════════════════════════════════
+# HEALTH CHECK SERVER (for Render Web Service)
+# ═══════════════════════════════════════════════════════════════════════
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format, *args):
+        pass  # suppress request logs
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    server.serve_forever()
+
+# ═══════════════════════════════════════════════════════════════════════
 # BACKGROUND SCHEDULER
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -1163,6 +1183,10 @@ def main():
     # Create and set event loop for Python 3.10+ compatibility
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+
+    # Start health check server (for Render Web Service)
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
 
     # Initial golden pairs
     EVOLUTION.get_golden_pairs()
