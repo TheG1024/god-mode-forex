@@ -691,89 +691,15 @@ class DataProvider:
             logger.warning(f"CFTC COT error for {pair}: {e}")
             return None
     
-    def fetch_exchange_api(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
-        """Fetch exchange rates from fawazahmed0/exchange-api (free, no key, no rate limits).
-        Provides daily rates as OHLC proxy."""
-        # Handle both "EUR/USD" and "EURUSD" formats
-        clean = pair.replace("/", "")
-        base_currency = clean[:3].lower()
-        quote_currency = clean[3:].lower()
-        
-        # Primary CDN
-        urls = [
-            f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/{base_currency}.json",
-            f"https://latest.currency-api.pages.dev/v1/currencies/{base_currency}.json"
-        ]
-        
-        for url in urls:
-            try:
-                r = self.session.get(url, timeout=10)
-                r.raise_for_status()
-                data = r.json()
-                
-                rates = data.get(base_currency, {})
-                if quote_currency not in rates:
-                    continue
-                
-                rate = float(rates[quote_currency])
-                date_str = data.get("date", datetime.now().strftime("%Y-%m-%d"))
-                
-                # Generate synthetic OHLC around the daily rate
-                # Use random walk to create realistic candle patterns
-                periods = outputsize
-                np.random.seed(hash(pair) % 2**32)
-                returns = np.random.normal(0, 0.0005, periods)
-                prices = rate * np.exp(np.cumsum(returns))
-                
-                # Create OHLC from close prices
-                noise = np.random.uniform(0.999, 1.001, (periods, 3))
-                df = pd.DataFrame({
-                    "open": prices * noise[:, 0],
-                    "high": prices * noise[:, 1],
-                    "low": prices * noise[:, 2],
-                    "close": prices
-                })
-                df["high"] = df[["open", "high", "close"]].max(axis=1)
-                df["low"] = df[["open", "low", "close"]].min(axis=1)
-                df.index = pd.date_range(end=pd.to_datetime(date_str), periods=periods, freq="1h")
-                
-                return df[["open", "high", "low", "close"]]
-            except Exception as e:
-                continue
-        
-        return None
-    
-    def generate_synthetic(self, pair: str, periods: int = 200) -> pd.DataFrame:
-        """Generate synthetic OHLC for testing when all APIs fail."""
-        np.random.seed(hash(pair) % 2**32)
-        base_price = 1.0 if "JPY" not in pair else 150.0
-        returns = np.random.normal(0, 0.0005, periods)
-        prices = base_price * np.exp(np.cumsum(returns))
-        
-        # Create OHLC from close prices
-        noise = np.random.uniform(0.999, 1.001, (periods, 3))
-        df = pd.DataFrame({
-            "open": prices * noise[:, 0],
-            "high": prices * noise[:, 1],
-            "low": prices * noise[:, 2],
-            "close": prices
-        })
-        df["high"] = df[["open", "high", "close"]].max(axis=1)
-        df["low"] = df[["open", "low", "close"]].min(axis=1)
-        df.index = pd.date_range(end=datetime.now(timezone.utc), periods=periods, freq="1h")
-        return df[["open", "high", "low", "close"]]
-    
     def cascade_fetch(self, pair: str, interval: str = "1h") -> pd.DataFrame:
-        """Cascade through data sources: TwelveData → yfinance → FCS → AlphaVantage → ExchangeAPI → FRED → CFTC → Synthetic."""
+        """Cascade through real data sources only. Raises RuntimeError if all fail."""
         for name, func in [
             ("TwelveData", lambda: self.fetch_twelve_data(pair, interval)),
             ("yfinance", lambda: self.fetch_yfinance(pair, interval)),
             ("FCS", lambda: self.fetch_fcs_api(pair, interval)),
             ("AlphaVantage", lambda: self.fetch_alpha_vantage(pair, interval)),
-            ("ExchangeAPI", lambda: self.fetch_exchange_api(pair, interval)),
             ("FRED", lambda: self.fetch_fred(pair, interval)),
             ("CFTC", lambda: self.fetch_cftc_cot(pair, interval)),
-            ("Synthetic", lambda: self.generate_synthetic(pair))
         ]:
             try:
                 df = func()
