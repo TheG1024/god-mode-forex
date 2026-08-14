@@ -24,6 +24,7 @@ import numpy as np
 from scipy.signal import argrelextrema
 import schedule
 from dotenv import load_dotenv
+import yfinance as yf
 
 # Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -68,6 +69,18 @@ class Config:
     SCAN_PAIRS: List[str] = None  # Will be populated from ALL_PAIRS
     TOP_VOLATILE_COUNT: int = 12
     REBALANCE_INTERVAL_HOURS: int = 168  # Weekly
+    
+    # FCS API (backup data source)
+    FCS_API_KEY: str = os.getenv("FCS_API_KEY", "")
+    
+    # Alpha Vantage (backup data source)
+    ALPHA_VANTAGE_API_KEY: str = os.getenv("ALPHA_VANTAGE_API_KEY", "")
+    
+    # FRED API (economic data - free, no key required for basic)
+    FRED_API_KEY: str = os.getenv("FRED_API_KEY", "DEMO_KEY")
+    
+    # CoinGecko (crypto data - free, no key required)
+    COINGECKO_API_KEY: str = os.getenv("COINGECKO_API_KEY", "")
     
     # News Filter
     NEWSAPI_KEY: str = os.getenv("NEWSAPI_KEY", "")
@@ -410,6 +423,274 @@ class DataProvider:
             logger.error(f"TwelveData error for {pair}: {e}")
             return None
     
+    def fetch_yfinance(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
+        """Fetch OHLC data from Yahoo Finance (free, no API key needed)."""
+        # yfinance uses tickers like EURUSD=X
+        symbol = pair.replace("/", "") + "=X"
+        try:
+            # Map interval to yfinance format
+            yf_interval = interval.replace("h", "h").replace("d", "d")
+            # For intraday data, max period is 60 days with 1h interval
+            period = "60d" if yf_interval in ["1h", "2h", "4h"] else "1y"
+            
+            # Add small delay to avoid rate limiting
+            import time
+            time.sleep(1)
+            
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period=period, interval=yf_interval)
+            
+            if df is None or len(df) < 50:
+                return None
+            
+            df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close"})
+            df.index.name = "timestamp"
+            
+            # Return last N rows
+            if len(df) > outputsize:
+                df = df.tail(outputsize)
+            
+            return df[["open", "high", "low", "close"]]
+        except Exception as e:
+            logger.warning(f"yfinance error for {pair}: {e}")
+            return None
+    
+    def fetch_fcs_api(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
+        """Fetch OHLC data from FCS API (free tier: 500 calls/month)."""
+        if not CONFIG.FCS_API_KEY:
+            return None
+        # FCS uses format like EURUSD
+        symbol = pair.replace("/", "")
+        url = "https://fcsapi.com/v3/forex/history"
+        params = {
+            "symbol": symbol,
+            "period": interval,
+            "key": CONFIG.FCS_API_KEY
+        }
+        try:
+            r = self.session.get(url, params=params, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            
+            if data.get("status") != 1 or "response" not in data:
+                logger.warning(f"FCS API: {data.get('msg', 'No data')}")
+                return None
+            
+            records = data["response"]
+            if not records:
+                return None
+            
+            df = pd.DataFrame(records)
+            df = df.rename(columns={
+                "t": "timestamp", "o": "open", "h": "high", 
+                "l": "low", "c": "close"
+            })
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df = df.set_index("timestamp").sort_index()
+            
+            for col in ["open", "high", "low", "close"]:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            
+            df = df.dropna()
+            
+            if len(df) > outputsize:
+                df = df.tail(outputsize)
+            
+            return df[["open", "high", "low", "close"]]
+        except Exception as e:
+            logger.warning(f"FCS API error for {pair}: {e}")
+            return None
+    
+    def fetch_alpha_vantage(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
+        """Fetch OHLC data from Alpha Vantage (free tier: 25 calls/day)."""
+        if not CONFIG.ALPHA_VANTAGE_API_KEY:
+            return None
+        # Alpha Vantage uses format like EURUSD
+        symbol = pair.replace("/", "")
+        url = "https://www.alphavantage.co/query"
+        
+        # Map interval
+        av_interval = interval.replace("1h", "60min").replace("4h", "240min").replace("1d", "Daily")
+        
+        params = {
+            "function": "FX_INTRADAY" if "min" in av_interval else "FX_DAILY",
+            "from_symbol": symbol[:3],
+            "to_symbol": symbol[3:],
+            "interval": av_interval if "min" in av_interval else None,
+            "outputsize": "full",
+            "apikey": CONFIG.ALPHA_VANTAGE_API_KEY
+        }
+        # Remove None params
+        params = {k: v for k, v in params.items() if v is not None}
+        
+        try:
+            r = self.session.get(url, params=params, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            
+            # Find the time series key
+            ts_key = None
+            for key in data:
+                if "Time Series" in key or "time series" in key.lower():
+                    ts_key = key
+                    break
+            
+            if not ts_key:
+                logger.warning(f"Alpha Vantage: {data.get('Note', 'No time series data')}")
+                return None
+            
+            records = data[ts_key]
+            rows = []
+            for timestamp, values in records.items():
+                rows.append({
+                    "timestamp": pd.to_datetime(timestamp),
+                    "open": float(values.get("1. open", 0)),
+                    "high": float(values.get("2. high", 0)),
+                    "low": float(values.get("3. low", 0)),
+                    "close": float(values.get("4. close", 0))
+                })
+            
+            df = pd.DataFrame(rows).set_index("timestamp").sort_index()
+            df = df[(df > 0).all(axis=1)]  # Remove zero rows
+            
+            if len(df) > outputsize:
+                df = df.tail(outputsize)
+            
+            return df[["open", "high", "low", "close"]]
+        except Exception as e:
+            logger.warning(f"Alpha Vantage error for {pair}: {e}")
+            return None
+    
+    def fetch_fred(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
+        """Fetch economic data from FRED (Federal Reserve Economic Data) - free, no key for basic access.
+        Maps currency pairs to relevant economic indicators for fundamental context."""
+        # Map currency pairs to relevant FRED series
+        fred_series_map = {
+            "USD": "DGS10",    # 10-Year Treasury Yield
+            "EUR": "DGS10",    # ECB rates via US proxy
+            "GBP": "DGS10",
+            "JPY": "DGS10",
+            "CHF": "DGS10",
+            "AUD": "DGS10",
+            "NZD": "DGS10",
+            "CAD": "DGS10",
+        }
+        
+        base_currency = pair[:3]
+        series_id = fred_series_map.get(base_currency, "DGS10")
+        
+        url = "https://api.stlouisfed.org/fred/series/observations"
+        params = {
+            "series_id": series_id,
+            "api_key": CONFIG.FRED_API_KEY or "DEMO_KEY",
+            "file_type": "json",
+            "limit": str(outputsize),
+            "sort_order": "desc"
+        }
+        try:
+            r = self.session.get(url, params=params, timeout=10)
+            if r.status_code == 400:
+                # DEMO_KEY may be rate limited, try without auth
+                params.pop("api_key", None)
+                r = self.session.get(url, params=params, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            
+            if "observations" not in data:
+                return None
+            
+            records = data["observations"]
+            rows = []
+            for obs in records:
+                try:
+                    val = float(obs["value"]) if obs["value"] != "." else None
+                    if val is not None and val > 0:
+                        rows.append({
+                            "timestamp": pd.to_datetime(obs["date"]),
+                            "open": val, "high": val, "low": val, "close": val
+                        })
+                except (ValueError, KeyError):
+                    continue
+            
+            if len(rows) < 50:
+                return None
+            
+            df = pd.DataFrame(rows).set_index("timestamp").sort_index()
+            
+            # Resample to requested interval if needed
+            if interval == "1h":
+                df = df.resample("1h").ffill()
+            
+            if len(df) > outputsize:
+                df = df.tail(outputsize)
+            
+            return df[["open", "high", "low", "close"]]
+        except Exception as e:
+            logger.warning(f"FRED error for {pair}: {e}")
+            return None
+    
+    def fetch_cftc_cot(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
+        """Fetch CFTC Commitments of Traders data - free, no key.
+        Provides institutional positioning data for major currency futures."""
+        # Map forex pairs to CFTC futures codes
+        cot_futures_map = {
+            "EUR/USD": "EURO - CHICAGO MERCANTILE EXCHANGE",
+            "GBP/USD": "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE",
+            "USD/JPY": "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE",
+            "AUD/USD": "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+            "USD/CAD": "CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+            "USD/CHF": "SWISS FRANC - CHICAGO MERCANTILE EXCHANGE",
+            "NZD/USD": "NEW ZEALAND DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+        }
+        
+        futures_name = cot_futures_map.get(pair)
+        if not futures_name:
+            return None
+        
+        url = "https://www.cftc.gov/dea/futures/other_lf.htm"
+        try:
+            r = self.session.get(url, timeout=10)
+            r.raise_for_status()
+            
+            # Parse HTML table for COT data
+            from io import StringIO
+            tables = pd.read_html(StringIO(r.text))
+            
+            if not tables:
+                return None
+            
+            # Find the table with our futures contract
+            for table in tables:
+                if futures_name in str(table.values):
+                    # Extract net positioning
+                    df = table.copy()
+                    df.columns = [str(c).strip() for c in df.columns]
+                    
+                    # Try to find date and net long columns
+                    date_col = [c for c in df.columns if "date" in c.lower() or "as of" in c.lower()]
+                    if date_col:
+                        df["timestamp"] = pd.to_datetime(df[date_col[0]], errors="coerce")
+                        df = df.dropna(subset=["timestamp"])
+                        df = df.set_index("timestamp").sort_index()
+                        
+                        # Use first numeric column as close proxy
+                        numeric_cols = df.select_dtypes(include=[np.number]).columns
+                        if len(numeric_cols) > 0:
+                            df["close"] = df[numeric_cols[0]]
+                            df["open"] = df["close"]
+                            df["high"] = df["close"]
+                            df["low"] = df["close"]
+                            
+                            if len(df) > outputsize:
+                                df = df.tail(outputsize)
+                            
+                            return df[["open", "high", "low", "close"]]
+            
+            return None
+        except Exception as e:
+            logger.warning(f"CFTC COT error for {pair}: {e}")
+            return None
+    
     def generate_synthetic(self, pair: str, periods: int = 200) -> pd.DataFrame:
         """Generate synthetic OHLC for testing when all APIs fail."""
         np.random.seed(hash(pair) % 2**32)
@@ -431,9 +712,14 @@ class DataProvider:
         return df[["open", "high", "low", "close"]]
     
     def cascade_fetch(self, pair: str, interval: str = "1h") -> pd.DataFrame:
-        """Try Twelve Data → Synthetic fallback."""
+        """Cascade through data sources: TwelveData → yfinance → FCS → AlphaVantage → FRED → CFTC → Synthetic."""
         for name, func in [
             ("TwelveData", lambda: self.fetch_twelve_data(pair, interval)),
+            ("yfinance", lambda: self.fetch_yfinance(pair, interval)),
+            ("FCS", lambda: self.fetch_fcs_api(pair, interval)),
+            ("AlphaVantage", lambda: self.fetch_alpha_vantage(pair, interval)),
+            ("FRED", lambda: self.fetch_fred(pair, interval)),
+            ("CFTC", lambda: self.fetch_cftc_cot(pair, interval)),
             ("Synthetic", lambda: self.generate_synthetic(pair))
         ]:
             try:

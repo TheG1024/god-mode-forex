@@ -9,6 +9,11 @@ requests==2.32.3
 # Technical Analysis
 scipy>=1.13.1
 
+# Data Sources
+yfinance>=0.2.40
+lxml>=5.3.0
+html5lib>=1.1
+
 # NVIDIA NIM / LLM
 openai==1.109.1
 
