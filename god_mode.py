@@ -43,6 +43,7 @@ load_dotenv()
 class Config:
     # API Keys
     TWELVE_DATA_API_KEY: str = os.getenv("TWELVE_DATA_API_KEY", "")
+    RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "")
     NVIDIA_NIM_API_KEY: str = os.getenv("NVIDIA_NIM_API_KEY", "")
     NVIDIA_NIM_BASE_URL: str = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
     TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -691,6 +692,63 @@ class DataProvider:
             logger.warning(f"CFTC COT error for {pair}: {e}")
             return None
     
+    def fetch_quotient(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
+        """Fetch from Quotient API via RapidAPI (real OHLC + volume)."""
+        api_key = os.environ.get("RAPIDAPI_KEY", "")
+        if not api_key:
+            return None
+        
+        clean = pair.replace("/", "").upper()
+        
+        # Map interval to Quotient format
+        interval_map = {"1m": "1", "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240"}
+        q_interval = interval_map.get(interval, "60")
+        
+        try:
+            from datetime import timedelta
+            end = datetime.now()
+            start = end - timedelta(days=min(outputsize // 24 + 1, 30))
+            
+            r = self.session.get(
+                "https://quotient.p.rapidapi.com/forex/intraday",
+                headers={
+                    "x-rapidapi-key": api_key,
+                    "x-rapidapi-host": "quotient.p.rapidapi.com"
+                },
+                params={
+                    "symbol": clean,
+                    "interval": q_interval,
+                    "from": start.strftime("%Y-%m-%d"),
+                    "to": end.strftime("%Y-%m-%d %H:%M")
+                },
+                timeout=15
+            )
+            
+            if r.status_code == 429:
+                logger.warning("Quotient rate limited")
+                return None
+            
+            r.raise_for_status()
+            data = r.json()
+            
+            if isinstance(data, dict) and "message" in data:
+                return None
+            
+            if not isinstance(data, list) or len(data) == 0:
+                return None
+            
+            df = pd.DataFrame(data)
+            # Drop rows with message (upgrade prompt) or missing data
+            df = df.dropna(subset=["Date", "Close"])
+            df["Date"] = pd.to_datetime(df["Date"])
+            df = df.set_index("Date").sort_index()
+            df = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+            
+            return df[["open", "high", "low", "close"]]
+        except Exception as e:
+            logger.warning(f"Quotient error for {pair}: {e}")
+            return None
+    
     def fetch_frankfurter(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
         """Fetch from Frankfurter API (free, no key, no rate limits). Daily rates only."""
         clean = pair.replace("/", "")
@@ -738,6 +796,7 @@ class DataProvider:
         """Cascade through real data sources only. Raises RuntimeError if all fail."""
         for name, func in [
             ("TwelveData", lambda: self.fetch_twelve_data(pair, interval)),
+            ("Quotient", lambda: self.fetch_quotient(pair, interval)),
             ("yfinance", lambda: self.fetch_yfinance(pair, interval)),
             ("FCS", lambda: self.fetch_fcs_api(pair, interval)),
             ("AlphaVantage", lambda: self.fetch_alpha_vantage(pair, interval)),

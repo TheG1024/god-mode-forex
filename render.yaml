@@ -10,6 +10,8 @@ services:
         value: "3.11.0"
       - key: TWELVE_DATA_API_KEY
         sync: false
+      - key: RAPIDAPI_KEY
+        sync: false
       - key: NVIDIA_NIM_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
