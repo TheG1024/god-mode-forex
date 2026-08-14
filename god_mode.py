@@ -691,6 +691,49 @@ class DataProvider:
             logger.warning(f"CFTC COT error for {pair}: {e}")
             return None
     
+    def fetch_frankfurter(self, pair: str, interval: str = "1h", outputsize: int = 200) -> Optional[pd.DataFrame]:
+        """Fetch from Frankfurter API (free, no key, no rate limits). Daily rates only."""
+        clean = pair.replace("/", "")
+        base = clean[:3].upper()
+        quote = clean[3:].upper()
+        
+        try:
+            # Get last N days of daily rates
+            from datetime import timedelta
+            end = datetime.now()
+            start = end - timedelta(days=outputsize)
+            
+            url = f"https://api.frankfurter.dev/v1/{start.strftime('%Y-%m-%d')}..{end.strftime('%Y-%m-%d')}?base={base}&symbols={quote}"
+            r = self.session.get(url, timeout=10)
+            r.raise_for_status()
+            data = r.json()
+            
+            rates = data.get("rates", {})
+            if not rates:
+                return None
+            
+            # Build DataFrame from daily close rates
+            rows = []
+            for date_str, rate_dict in sorted(rates.items()):
+                rate = rate_dict.get(quote)
+                if rate:
+                    rows.append({"date": pd.to_datetime(date_str), "close": float(rate)})
+            
+            if len(rows) < 20:
+                return None
+            
+            df = pd.DataFrame(rows).set_index("date")
+            # Generate synthetic OHLC around daily close (Frankfurter only provides close)
+            df["open"] = df["close"].shift(1).fillna(df["close"])
+            df["high"] = df[["open", "close"]].max(axis=1) * 1.001
+            df["low"] = df[["open", "close"]].min(axis=1) * 0.999
+            df.index = pd.date_range(end=datetime.now(), periods=len(df), freq="1D")
+            
+            return df[["open", "high", "low", "close"]]
+        except Exception as e:
+            logger.warning(f"Frankfurter error for {pair}: {e}")
+            return None
+    
     def cascade_fetch(self, pair: str, interval: str = "1h") -> pd.DataFrame:
         """Cascade through real data sources only. Raises RuntimeError if all fail."""
         for name, func in [
@@ -698,6 +741,7 @@ class DataProvider:
             ("yfinance", lambda: self.fetch_yfinance(pair, interval)),
             ("FCS", lambda: self.fetch_fcs_api(pair, interval)),
             ("AlphaVantage", lambda: self.fetch_alpha_vantage(pair, interval)),
+            ("Frankfurter", lambda: self.fetch_frankfurter(pair, interval)),
             ("FRED", lambda: self.fetch_fred(pair, interval)),
             ("CFTC", lambda: self.fetch_cftc_cot(pair, interval)),
         ]:
