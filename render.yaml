@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: forex-signal-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python god_mode.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: TWELVE_DATA_API_KEY
+        sync: false
+      - key: NVIDIA_NIM_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: NEWSAPI_KEY
+        sync: false
+      - key: FCS_API_KEY
+        sync: false
+      - key: ALPHA_VANTAGE_API_KEY
+        sync: false
+      - key: FRED_API_KEY
+        sync: false
+      - key: DB_PATH
+        value: "forex_signals.db"
+      - key: LOG_LEVEL
+        value: "INFO"
