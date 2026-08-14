@@ -1123,8 +1123,8 @@ class TelegramBot:
         self.app.add_handler(CommandHandler("help", self.start))
         self.app.add_handler(CallbackQueryHandler(self.callback_handler))
         
-        logger.info("Telegram bot started")
-        self.app.run_polling()
+        logger.info("Telegram bot started — deleting any existing webhook")
+        self.app.run_polling(drop_pending_updates=True)
 
 TELEGRAM_BOT = TelegramBot()
 
