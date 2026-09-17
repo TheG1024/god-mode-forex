@@ -1,1 +1,1 @@
-web: python god_mode.py
+web: python main.py

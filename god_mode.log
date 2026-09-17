@@ -1,0 +1,72 @@
+2026-08-14 22:30:31,576 | INFO     | god_mode | Data for EUR/USD from Synthetic: 200 candles
+2026-08-14 22:30:31,584 | INFO     | god_mode | Data for EUR/USD from Synthetic: 200 candles
+2026-08-14 22:30:31,590 | INFO     | god_mode | Data for GBP/JPY from Synthetic: 200 candles
+2026-08-14 22:30:31,596 | INFO     | god_mode | Data for AUD/USD from Synthetic: 200 candles
+2026-08-14 22:42:48,669 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 22:42:50,205 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key=DEMO_KEY&file_type=json&limit=200&sort_order=desc
+2026-08-14 22:42:51,069 | WARNING  | god_mode | CFTC COT error for EUR/USD: No tables found
+2026-08-14 22:42:52,356 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 22:42:53,175 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key=DEMO_KEY&file_type=json&limit=200&sort_order=desc
+2026-08-14 22:42:53,275 | WARNING  | god_mode | CFTC COT error for EUR/USD: No tables found
+2026-08-14 22:42:53,286 | INFO     | god_mode | Data for EUR/USD from Synthetic: 200 candles
+2026-08-14 22:42:57,067 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 22:42:57,681 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key=DEMO_KEY&file_type=json&limit=200&sort_order=desc
+2026-08-14 22:42:57,848 | WARNING  | god_mode | CFTC COT error for EUR/USD: No tables found
+2026-08-14 22:42:57,852 | INFO     | god_mode | Data for EUR/USD from Synthetic: 200 candles
+2026-08-14 22:43:00,855 | WARNING  | god_mode | yfinance error for GBP/JPY: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 22:43:01,981 | WARNING  | god_mode | FRED error for GBP/JPY: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key=DEMO_KEY&file_type=json&limit=200&sort_order=desc
+2026-08-14 22:43:01,985 | INFO     | god_mode | Data for GBP/JPY from Synthetic: 200 candles
+2026-08-14 22:43:05,258 | WARNING  | god_mode | yfinance error for AUD/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 22:43:05,872 | WARNING  | god_mode | FRED error for AUD/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&api_key=DEMO_KEY&file_type=json&limit=200&sort_order=desc
+2026-08-14 22:43:06,006 | WARNING  | god_mode | CFTC COT error for AUD/USD: No tables found
+2026-08-14 22:43:06,011 | INFO     | god_mode | Data for AUD/USD from Synthetic: 200 candles
+2026-08-14 22:43:55,885 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 22:43:57,470 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 22:44:01,168 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 22:44:02,805 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 22:44:03,110 | WARNING  | god_mode | CFTC COT error for EUR/USD: No tables found
+2026-08-14 22:44:03,116 | INFO     | god_mode | Data for EUR/USD from Synthetic: 200 candles
+2026-08-14 23:09:01,361 | INFO     | god_mode | Data for EUR/USD from yfinance: 200 candles
+2026-08-14 23:09:42,876 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:09:45,559 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 23:09:46,454 | WARNING  | god_mode | CFTC COT error for EUR/USD: No tables found
+2026-08-14 23:09:46,461 | INFO     | god_mode | Data for EUR/USD from Synthetic: 200 candles
+2026-08-14 23:12:19,002 | INFO     | god_mode | Data for EUR/USD from yfinance: 200 candles
+2026-08-14 23:12:21,009 | INFO     | god_mode | Data for GBP/JPY from yfinance: 200 candles
+2026-08-14 23:12:22,881 | INFO     | god_mode | Data for AUD/USD from yfinance: 200 candles
+2026-08-14 23:12:24,723 | INFO     | god_mode | Data for USD/CHF from yfinance: 200 candles
+2026-08-14 23:12:26,591 | INFO     | god_mode | Data for EUR/GBP from yfinance: 200 candles
+2026-08-14 23:14:35,354 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:14:35,354 | WARNING  | god_mode | ExchangeAPI failed for EUR/USD: 'DataProvider' object has no attribute 'fetch_exchange_api'
+2026-08-14 23:14:36,992 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 23:14:37,588 | WARNING  | god_mode | CFTC COT error for EUR/USD: No tables found
+2026-08-14 23:14:41,411 | WARNING  | god_mode | yfinance error for GBP/JPY: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:14:41,411 | WARNING  | god_mode | ExchangeAPI failed for GBP/JPY: 'DataProvider' object has no attribute 'fetch_exchange_api'
+2026-08-14 23:14:42,521 | WARNING  | god_mode | FRED error for GBP/JPY: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 23:15:33,163 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:15:34,542 | WARNING  | god_mode | FRED error for EUR/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 23:15:35,069 | WARNING  | god_mode | CFTC COT error for EUR/USD: No tables found
+2026-08-14 23:15:39,609 | WARNING  | god_mode | yfinance error for GBP/JPY: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:15:41,300 | WARNING  | god_mode | FRED error for GBP/JPY: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 23:15:45,015 | WARNING  | god_mode | yfinance error for AUD/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:15:46,149 | WARNING  | god_mode | FRED error for AUD/USD: 400 Client Error: Bad Request for url: https://api.stlouisfed.org/fred/series/observations?series_id=DGS10&file_type=json&limit=200&sort_order=desc
+2026-08-14 23:15:46,306 | WARNING  | god_mode | CFTC COT error for AUD/USD: No tables found
+2026-08-14 23:20:48,297 | WARNING  | god_mode | yfinance error for EUR/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:20:49,171 | INFO     | god_mode | Data for EUR/USD from Frankfurter: 142 candles
+2026-08-14 23:20:53,006 | WARNING  | god_mode | yfinance error for GBP/JPY: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:20:53,673 | INFO     | god_mode | Data for GBP/JPY from Frankfurter: 142 candles
+2026-08-14 23:20:56,977 | WARNING  | god_mode | yfinance error for AUD/USD: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:20:57,565 | INFO     | god_mode | Data for AUD/USD from Frankfurter: 142 candles
+2026-08-14 23:21:01,404 | WARNING  | god_mode | yfinance error for USD/CHF: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:21:02,070 | INFO     | god_mode | Data for USD/CHF from Frankfurter: 142 candles
+2026-08-14 23:21:05,705 | WARNING  | god_mode | yfinance error for EUR/GBP: Too Many Requests. Rate limited. Try after a while.
+2026-08-14 23:21:06,258 | INFO     | god_mode | Data for EUR/GBP from Frankfurter: 142 candles
+2026-08-14 23:56:03,880 | WARNING  | god_mode | Quotient rate limited
+2026-08-14 23:56:06,236 | INFO     | god_mode | Data for EUR/USD from yfinance: 200 candles
+2026-08-14 23:56:06,498 | WARNING  | god_mode | Quotient rate limited
+2026-08-14 23:56:07,958 | INFO     | god_mode | Data for GBP/JPY from yfinance: 200 candles
+2026-08-14 23:56:08,228 | WARNING  | god_mode | Quotient rate limited
+2026-08-14 23:56:09,702 | INFO     | god_mode | Data for AUD/USD from yfinance: 200 candles
+2026-08-14 23:56:09,997 | WARNING  | god_mode | Quotient rate limited
+2026-08-14 23:56:11,525 | INFO     | god_mode | Data for USD/CHF from yfinance: 200 candles
+2026-08-14 23:56:14,396 | INFO     | god_mode | Data for EUR/GBP from yfinance: 200 candles

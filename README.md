@@ -14,21 +14,58 @@ Professional-grade automated Forex signal system combining **SMC Deep OTE strate
 | **TP1** | 1R |
 | **TP2** | 2R |
 
-## 🏗️ Architecture
+## 🏗️ Architecture (Modular, DI-Wired)
 
 ```
-god_mode.py          # Main bot (Telegram + Scheduler + Engine)
-forex_dashboard.py   # Streamlit web UI (Equity curve, Heatmap, Logs)
-requirements.txt     # Dependencies
-Procfile             # Railway/Render deployment
-.env.example         # Configuration template
+forex-signal-system/
+├── config.py                 # Config dataclass (single source of truth)
+├── main.py                   # Entry: DI wire-up, health + scheduler + bot
+├── models/
+│   └── signals.py            # Signal, SignalStatus, SignalDirection, MarketData
+├── data/
+│   ├── providers.py          # 6 data provider implementations
+│   ├── cascade.py            # Fallback chain: TwelveData → Quotient → yfinance → FCS → AlphaVantage → Frankfurter
+│   └── repository.py         # SignalRepository protocol + SQLite impl
+├── analysis/
+│   ├── indicators.py         # Pure: ema, rsi, atr, swings, fib
+│   ├── detector.py           # Deep OTE detection only
+│   └── market.py             # MarketAnalyzer using indicators + detector
+├── neural/
+│   └── brain.py              # NVIDIA NIM client (Llama 3.1 70B)
+├── filters/
+│   └── news.py               # NewsAPI circuit breaker
+├── evolution/
+│   └── scanner.py            # Weekly volatility scan 39→12 pairs
+├── orchestrator/
+│   └── signals.py            # SignalOrchestrator: scan → neural → news → monitor → resolve
+├── telegram/
+│   └── bot.py                # Commands + inline WIN/LOSS buttons + weekly report
+├── health/
+│   └── server.py             # /health endpoint for Render
+├── scheduler/
+│   └── jobs.py               # 15m scan, 5m monitor, Mon rebalance, Fri 16:00 report
+├── dashboard/
+│   ├── app.py                # Streamlit entry
+│   ├── data.py               # load_signals, load_volatility, load_performance
+│   ├── charts.py             # equity_curve, ai_bias_heatmap, volatility_bar, r_distribution
+│   └── ui.py                 # render_sidebar, render_signal_log, render_performance_metrics, render_neural_commentary
+├── tests/
+│   └── test_indicators.py    # Pure function tests
+├── requirements.txt
+├── Procfile                  # web: python main.py
+├── render.yaml               # Render deployment
+├── .env.example              # Config template
+└── README.md
 ```
 
 ## 📦 Data Pipeline (Cascade Redundancy)
 
 1. **Twelve Data** (Primary) — Intraday OHLC
-2. **Frankfurter** (Fallback) — Daily FX rates
-3. **Synthetic** (Last resort) — Generated for testing
+2. **Quotient** (RapidAPI) — Real OHLC + volume
+3. **yfinance** (Free) — Yahoo Finance backup
+4. **FCS API** — 500 calls/month free
+5. **Alpha Vantage** — 500 calls/day free
+6. **Frankfurter** (Free, no key) — Daily FX rates
 
 ## 🧠 Neural Brain
 
@@ -56,17 +93,18 @@ Procfile             # Railway/Render deployment
 | `/performance` | Win rate, Net R |
 | `/golden` | Current 12 Golden Pairs |
 | `/rebalance` | Force volatility scan |
-| `/update <ID> <WIN\|LOSS>` | Close trade manually |
+| `/update <ID> <WIN|LOSS>` | Close trade manually |
 | `/weekly` | Generate weekly audit |
 
 ### Signal UX
 - **Sequential delivery** — 3s delay between signals
 - **Instant-copy** — All values in MarkdownV2 code blocks
 - **Visual structure** — Dividers, emojis, clear sections
+- **Inline WIN/LOSS buttons** — One-tap resolution
 
 ## 📊 Streamlit Dashboard
 
-Run: `streamlit run forex_dashboard.py`
+Run: `streamlit run dashboard/app.py`
 
 Tabs:
 1. **Equity Curve** — Cumulative R + Daily P&L bars
@@ -76,13 +114,20 @@ Tabs:
 5. **Volatility** — Evolution engine rankings
 6. **AI Commentary** — Expandable reasoning per signal
 
+## 🧪 Tests
+
+```bash
+cd forex-signal-system
+pytest tests/test_indicators.py -v
+```
+
 ## 🚀 Deployment (Railway / Render)
 
 ```bash
 # 1. Push to GitHub
 # 2. Connect repo to Railway/Render
 # 3. Add env vars from .env.example
-# 4. Deploy (Procfile: `web: python god_mode.py`)
+# 4. Deploy (Procfile: `web: python main.py`)
 ```
 
 ## 🔧 Local Development
@@ -92,7 +137,7 @@ cd forex-signal-system
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env  # Fill in your keys
-python god_mode.py
+python main.py
 ```
 
 ## 📈 Weekly Audit Report (Auto)

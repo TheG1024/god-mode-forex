@@ -15,16 +15,50 @@ from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import os
 import sys
+import threading
+import json
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 sys.path.append(os.path.dirname(__file__))
 from god_mode import CONFIG, DB, SignalStatus, SignalDirection, EVOLUTION
 
-st.set_page_config(
-    page_title="God Mode Forex Dashboard",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# ═══════════════════════════════════════════════════════════════════════
+# HEALTH CHECK ENDPOINT
+# ═══════════════════════════════════════════════════════════════════════
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    """Simple health check endpoint for container orchestration."""
+    
+    def do_GET(self):
+        if self.path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            health = {
+                "status": "healthy",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "service": "forex-dashboard"
+            }
+            self.wfile.write(json.dumps(health).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        # Suppress default log output
+        pass
+
+
+def start_health_check_server(port: int = 8080):
+    """Start health check HTTP server in background thread."""
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server
+
+
+# Start health check server
+start_health_check_server()
 
 # ═══════════════════════════════════════════════════════════════════════
 # DATA LOADERS
@@ -394,6 +428,14 @@ def render_neural_commentary(signals_df: pd.DataFrame):
 # ═══════════════════════════════════════════════════════════════════════
 
 def main():
+    # Streamlit page config (must be first Streamlit command)
+    st.set_page_config(
+        page_title="God Mode Forex Dashboard",
+        page_icon="🤖",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
     # Custom CSS
     st.markdown("""
     <style>
