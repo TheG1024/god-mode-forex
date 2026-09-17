@@ -150,3 +150,7 @@ Every **Friday 16:00 UTC** → Telegram:
 ## 📝 License
 
 MIT — Build, test, deploy, evolve.
+
+---
+
+*Last updated: 2026-09-17*
